@@ -16,6 +16,13 @@ class HMM_NER:
         # 初始化隐状态数量(实体标签数)和观测数量(字数)
         self.tag_size = len(self.tag2idx)
         self.vocab_size = max([v for _, v in self.char2idx.items()]) + 1
+
+        self.char2idx = {"我":0, "看":1}
+        self.tag2idx = {"O": 0, "B": 1, "V":2}
+        self.idx2tag = {v: k for k, v in self.tag2idx.items()}
+        self.tag_size = len(self.tag2idx)
+        self.vocab_size = 2
+
         # 初始化A, B, pi为全0
         self.transition = np.zeros([self.tag_size,
                                     self.tag_size])
@@ -70,41 +77,56 @@ class HMM_NER:
         print("initialize training...")
         train_dic = load_data(train_dic_path)
         # 估计转移概率矩阵, 发射概率矩阵和初始概率矩阵的参数
-        self.estimate_transition_probs(train_dic)
-        self.estimate_emission_probs(train_dic)
+        #self.estimate_transition_probs(train_dic)
+        #self.estimate_emission_probs(train_dic)
         # take the logarithm
         # 取log防止计算结果下溢
-        self.pi = -np.log(self.pi)
-        self.transition = -np.log(self.transition)
-        self.emission = -np.log(self.emission)
+        self.pi = np.log(self.pi)
+        self.transition = np.log(self.transition)
+        self.emission = np.log(self.emission)
 
+        self.pi = np.array([0.2, 0.4, 0.4])
+        self.transition = np.array([
+            [0.5, 0.2, 0.3],
+            [0.3, 0.5, 0.2],
+            [0.2, 0.3, 0.5]
+        ])
+        self.emission = np.array([
+            [0.5, 0.5],
+            [0.4, 0.6],
+            [0.7, 0.3]]
+        )
+
+    #f 确认无问题
     def viterbi_decode(self, text):
 
-        pi = [ [-1 for j in range(len(text)) ] for i in range(self.tag_size) ]
+        pi = [ [j for j in range(self.tag_size) ] for i in range(len(text)) ]
 
-        f = [ [0 for j in range(len(text)) ] for i in range(self.tag_size) ]
+        f = [ [0 for j in range(self.tag_size) ] for i in range(len(text)) ]
+        f = np.array(f, dtype=np.float64)
 
         #init & condition
         for i in range(self.tag_size):
-            f[i][0] = self.pi[i] + self.emission[i][self.char2idx[text[0]] ]
+            f[0][i] = self.pi[i] * self.emission[i][self.char2idx[text[0]] ]
 
-        for j in range(1, len(text)): #j timestep
-            for i in range( self.tag_size ): # i tag_size
-               # f[i][j] = max([ self.transition[i][j] + self.emission[i][self.char2idx[text[j]]  ] ])
-                f[i][j] = np.max([ self.transition[:][i] + self.emission[i][self.char2idx[text[j]]]  ])
-                pi[i][j] = np.argmax([ self.transition[:][i] + self.emission[i][self.char2idx[text[j]]]  ])
+        max_tag = 0
+        for i in range(1, len(text)):
+            for j in range( self.tag_size ):
+                f[i][j] = np.max( f[i-1][:] * self.transition[:,j] * self.emission[j][self.char2idx[text[i]]]  )
+                pi[i][j] = np.argmax( f[i-1][:] * self.transition[:,j] * self.emission[j][self.char2idx[text[i]]]  )
+                max_tag = pi[i][j]
 
-        timestep = len(text)-1
+        timestep = len(text)
         path = []
-        last_tag = np.argmax( np.array( f[-1][:]))
 
-        path.append(last_tag)
-        x = len(text)-1
-        y = last_tag
+
+        path.append(max_tag)
+        x = timestep - 1
+        y = max_tag
         for k in range(1,timestep):
+            y = pi[x][y]
             x -= 1
-            y = pi[y][x]
-            path.append(pi[y][x])
+            path.append(pi[x][y])
 
 
         data = [ self.idx2tag[ele] for ele in path[::-1] ]
@@ -121,4 +143,5 @@ if __name__ == '__main__':
     #model.fit("./corpus/train_data.txt")
 
     model.fit("./corpus/train_data_text.txt")
-    model.predict("我在中国吃美国的面包")
+    model.predict("我看我")
+    #model.predict("我在中国吃美国的面包")
