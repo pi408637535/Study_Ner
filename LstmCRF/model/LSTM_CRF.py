@@ -31,7 +31,7 @@ class NERLSTM_CRF(nn.Module):
         """ 得到发射矩阵 """
         self.hidden2tag = nn.Linear(self.hidden_dim, self.tagset_size)
         
-        self.crf = CRF(self.tagset_size,batch_first=True)
+        self.crf = CRF(tag2id, self.tagset_size, batch_first=True)
 
     def forward(self, char_ids,seg_ids,mask=None):
         
@@ -47,15 +47,18 @@ class NERLSTM_CRF(nn.Module):
         """ 预测时，得到维特比解码的路径 """
         return self.crf.decode(outputs, mask)
 
-    def log_likelihood(self, char_ids, seg_ids, tag_ids, mask=None):
-        
+    def _get_lstm_features(self, char_ids, seg_ids):
         embedding = torch.cat(
-            (self.char_emb(char_ids),self.seg_emb(seg_ids)), 2
+            (self.char_emb(char_ids), self.seg_emb(seg_ids)), 2
         )
-        #embedding:batch,seq,hidden: 128,37,129
+        # embedding:batch,seq,hidden: 128,37,129
         outputs, hidden = self.lstm(embedding)
         outputs = self.dropout(outputs)
         outputs = self.hidden2tag(outputs)
+        return outputs
+
+    def neg_log_likelihood(self, char_ids, seg_ids, tag_ids, mask=None):
+        feats = self._get_lstm_features(char_ids, seg_ids)
         
         """ 训练时，得到损失 """
-        return - self.crf(outputs, tag_ids, mask)
+        return - self.crf(feats, tag_ids, mask)

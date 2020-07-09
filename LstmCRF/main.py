@@ -71,7 +71,7 @@ def train():
             
             """ 计算损失和反向传播 """
             _, char_ids, seg_ids, tag_ids, mask = batch
-            loss = model.log_likelihood(char_ids,seg_ids,tag_ids, mask)
+            loss = model.neg_log_likelihood(char_ids,seg_ids,tag_ids, mask)
             loss.backward()
             
             """ 梯度截断，最大梯度为5 """

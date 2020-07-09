@@ -130,6 +130,9 @@ def tag_mapping(sentences):
     
     dico = create_dico(tags)
     dico["<pad>"] = 100000002
+    #为了不改变my_pytorch_crf模型，添加START,END
+    dico["<start>"] = 100000003
+    dico["<stop>"] = 100000004
 
     tag_to_id, id_to_tag = create_mapping(dico)
     
@@ -189,6 +192,7 @@ def test_ner(results, path):
     """
     
     """ 用CoNLL-2000的脚本，需要把预测结果保存为文件，再读取 """
+    #Todo need to study CoNLL
     output_file = os.path.join(path, "ner_predict.utf8")
     with open(output_file, "w",encoding='utf8') as f:
         to_write = []
