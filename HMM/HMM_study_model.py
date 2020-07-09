@@ -138,10 +138,10 @@ class HMM_NER:
         best_tag_id = self.viterbi_decode(text)
 
 if __name__ == '__main__':
-    model = HMM_NER(char2idx_path="./dicts/char2idx.json",
-                    tag2idx_path="./dicts/tag2idx.json")
+    model = HMM_NER(char2idx_path="../dicts/char2idx.json",
+                    tag2idx_path="../dicts/tag2idx.json")
     #model.fit("./corpus/train_data.txt")
 
-    model.fit("./corpus/train_data_text.txt")
+    model.fit("../corpus/train_data_text.txt")
     model.predict("我看我")
     #model.predict("我在中国吃美国的面包")
