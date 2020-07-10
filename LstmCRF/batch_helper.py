@@ -49,8 +49,6 @@ class BatchManager(object):
             
             padding = [0] * (max_length - len(chars_idx))
 
-            if(len(padding) > 0):
-                print()
 
             """ CoNLL-2000的评估脚本需要"""
             batch_chars.append(chars + padding)

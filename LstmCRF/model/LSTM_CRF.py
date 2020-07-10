@@ -2,6 +2,12 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from model.torchcrf import CRF
+import torch
+import torch.autograd as autograd
+import torch.nn as nn
+import torch.optim as optim
+
+
 
 class NERLSTM_CRF(nn.Module):
     def __init__(self, config, char2id, tag2id, emb_matrix):
@@ -61,4 +67,4 @@ class NERLSTM_CRF(nn.Module):
         feats = self._get_lstm_features(char_ids, seg_ids)
         
         """ 训练时，得到损失 """
-        return - self.crf(feats, tag_ids, mask)
+        return  self.crf(feats, tag_ids, mask)
