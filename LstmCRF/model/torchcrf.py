@@ -133,20 +133,17 @@ class CRF(nn.Module):
         return loss.sum() / mask.float().sum()
 
     def _viterbi_decode(self, feats, mask):
-
-        feats = t.squeeze(0)
-
         seq_length, tag_size = feats.size()
         f = torch.zeros(seq_length, tag_size)
 
         init_vvars = torch.full((1, self.tagset_size), -10000.)
-        init_vvars[0][self.tag_to_ix[START_TAG]] = 0
+        init_vvars[0][self.tag_to_ix["<start>"]] = 0
 
         forward_var = init_vvars
 
-        pi = [ [-1 for j in range(tag_size) ] for i in range(seq_length) ]
+        pi = [[-1 for j in range(tag_size)] for i in range(seq_length)]
 
-        for i,feat in enumerate(feats):
+        for i, feat in enumerate(feats):
             viterbi_var = []
 
             for tag in range(tag_size):
@@ -155,10 +152,10 @@ class CRF(nn.Module):
 
                 viterbi_var.append(next_tag[0][best_tag_id])
                 pi[i][tag] = best_tag_id.numpy()[0]
-            forward_var = (t.cat( viterbi_var, dim = 0 ) + feat).view(1,-1)
+            forward_var = (t.cat(viterbi_var, dim=0) + feat).view(1, -1)
 
         # Transition to STOP_TAG
-        terminal_var = forward_var + self.transitions[self.tag_to_ix[STOP_TAG]]
+        terminal_var = forward_var + self.transitions[self.tag_to_ix["<stop>"]]
         best_tag_id = terminal_var.argmax(dim=1)
 
         path = [best_tag_id.numpy()[0]]
@@ -166,17 +163,12 @@ class CRF(nn.Module):
         y = best_tag_id
 
         for k in range(1, seq_length):
-            path.append(pi[x][y])  #STOP_TAG has been add so I lift this one
+            path.append(pi[x][y])  # STOP_TAG has been add so I lift this one
             y = pi[x][y]
             x -= 1
 
-
-
-
         data = [self.idx2tag[ele] for ele in path[::-1]]
         print(data)
-
-
 
     def decode(self, emissions: torch.Tensor,
                mask: Optional[torch.ByteTensor] = None) -> List[List[int]]:
