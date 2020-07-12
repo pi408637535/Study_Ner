@@ -42,7 +42,7 @@ class CRF(nn.Module):
     .. _Viterbi algorithm: https://en.wikipedia.org/wiki/Viterbi_algorithm
     """
 
-    def __init__(self, tag2id, num_tags: int, batch_first: bool = False) -> None:
+    def __init__(self, tag2id, num_tags: int, device, batch_first: bool = False) -> None:
         if num_tags <= 0:
             raise ValueError(f'invalid number of tags: {num_tags}')
         super().__init__()
@@ -52,7 +52,7 @@ class CRF(nn.Module):
         self.end_transitions = nn.Parameter(torch.empty(num_tags))
         self.transitions = nn.Parameter(torch.empty(num_tags, num_tags))
 
-
+        self.device = device
         self.transitions = nn.Parameter(
             torch.randn(num_tags, num_tags))
         # These two statements enforce the constraint that we never transfer
@@ -85,7 +85,7 @@ class CRF(nn.Module):
             emissions: torch.Tensor,
             tags: torch.LongTensor,
             mask: Optional[torch.ByteTensor] = None,
-            reduction: str = 'mean',
+            reduction: str = 'token_mean',
     ) -> torch.Tensor:
         """Compute the conditional log likelihood of a sequence of tags given emission scores.
 
@@ -132,7 +132,7 @@ class CRF(nn.Module):
 
         return loss.sum() / mask.float().sum()
 
-    def _viterbi_decode(self, feats, mask):
+    def _viterbi_decode_old(self, feats, mask):
         seq_length, tag_size = feats.size()
         f = torch.zeros(seq_length, tag_size)
 
@@ -170,6 +170,49 @@ class CRF(nn.Module):
         data = [self.idx2tag[ele] for ele in path[::-1]]
         print(data)
 
+    def _viterbi_decode(self, feats, mask):
+        """
+            :param feats: (seq_len, batch_size, tag_size)
+            :param mask: (seq_len, batch_size)
+            :return best_path: (seq_len, batch_size)
+            """
+        seq_len, batch_size, tag_size = feats.size()
+        # initialize scores in log space
+        scores = feats.new_full((batch_size, tag_size), fill_value=-10000)
+        scores[:, self.tag_to_ix["<start>"]] = 0
+
+        scores = scores.to(self.device)
+
+        pointers = []
+        # forward
+        for t, feat in enumerate(feats):
+            # broadcast dimension: (batch_size, next_tag, current_tag)
+            scores_t = scores.unsqueeze(1) + self.transitions.unsqueeze(0)  # (batch_size, tag_size, tag_size)
+            # max along current_tag to obtain: next_tag score, current_tag pointer
+            scores_t, pointer = torch.max(scores_t, -1)  # (batch_size, tag_size), (batch_size, tag_size)
+            scores_t += feat
+            pointers.append(pointer)
+            mask_t = mask[t].unsqueeze(-1)  # (batch_size, 1)
+            scores = scores_t * mask_t + scores * (1 - mask_t)
+        pointers = torch.stack(pointers, 0)  # (seq_len, batch_size, tag_size)
+
+        scores += self.transitions[self.tag_to_ix["<stop>"]].unsqueeze(0)
+        best_score, best_tag = torch.max(scores, -1)  # (batch_size, ), (batch_size, )
+        # backtracking
+        best_path = best_tag.unsqueeze(-1).tolist()  # list shape (batch_size, 1)
+        for i in range(batch_size):
+            best_tag_i = best_tag[i]
+            seq_len_i = int(mask[:, i].sum())
+            for ptr_t in reversed(pointers[:seq_len_i, i]):
+                # ptr_t shape (tag_size, )
+                best_tag_i = ptr_t[best_tag_i].item()
+                best_path[i].append(best_tag_i)
+            # pop first tag
+            best_path[i].pop()
+            # reverse order
+            best_path[i].reverse()
+        return best_path
+
     def decode(self, emissions: torch.Tensor,
                mask: Optional[torch.ByteTensor] = None) -> List[List[int]]:
         """Find the most likely tag sequence using Viterbi algorithm.
@@ -188,17 +231,50 @@ class CRF(nn.Module):
         if mask is None:
             mask = emissions.new_ones(emissions.shape[:2], dtype=torch.uint8)
 
-        '''
+        
         if self.batch_first:
             emissions = emissions.transpose(0, 1)
             mask = mask.transpose(0, 1)
-        '''
+
 
         return self._viterbi_decode(emissions, mask)
 
+    def _forward_alg(self, feats, mask):
+        """
+        Arg:
+          feats: (seq_len, batch_size, tag_size)
+          mask: (seq_len, batch_size)
+        Return:
+          scores: (batch_size, )
+        """
+        seq_len, batch_size, tag_size = feats.size()
+        # initialize alpha to zero in log space
+        alpha = feats.new_full((batch_size, tag_size), fill_value=-10000)
+        # alpha in START_TAG is 1
+        alpha[:, self.tag_to_ix["<start>"]] = 0
+
+        alpha = alpha.to(self.device)
+
+        for i, feat in enumerate(feats):
+            # broadcast dimension: (batch_size, next_tag, current_tag)
+            # emit_score is the same regardless of current_tag, so we broadcast along current_tag
+            emit_score = feat.unsqueeze(-1)  # (batch_size, tag_size, 1)
+            # transition_score is the same regardless of each sample, so we broadcast along batch_size dimension
+            transition_score = self.transitions.unsqueeze(0)  # (1, tag_size, tag_size)
+            # alpha_score is the same regardless of next_tag, so we broadcast along next_tag dimension
+            alpha_score = alpha.unsqueeze(1)  # (batch_size, 1, tag_size)
+            alpha_score = alpha_score + transition_score + emit_score
+            # log_sum_exp along current_tag dimension to get next_tag alpha
+            mask_t = mask[i].unsqueeze(-1)
+            alpha = t.logsumexp(alpha_score, -1) * mask_t + alpha * (1 - mask_t)  # (batch_size, tag_size)
+        # arrive at END_TAG
+        alpha = alpha + self.transitions[self.tag_to_ix["<stop>"]].unsqueeze(0)
+
+        return t.logsumexp(alpha, -1)
+
     #计算所有路径
     #feats已经被transpose. feats:seq,batch,tags
-    def _forward_alg(self, feats, mask):
+    def _forward_alg_old(self, feats, mask):
         init_alphas = torch.full((1, self.tagset_size), -10000.)
         # START_TAG has all of the score.
         init_alphas[0][self.tag_to_ix["<start>"]] = 0.
@@ -206,7 +282,8 @@ class CRF(nn.Module):
 
 
         previous = init_alphas.expand(batch, -1) #previous batch,tag
-
+        previous = previous.to(self.device)
+        mask = mask.float()
 
         for i,feat in enumerate(feats): #feats:seq,batch,tag     feat: 1,batch,tag
             word_tag_score = [] # 计算逐个word->tag score
@@ -216,6 +293,7 @@ class CRF(nn.Module):
                 word_score = previous + word_emission + word_tag_transition #word_score:batch,tags
 
                 word_score = t.logsumexp(word_score, dim=1) #word_score:batch,1
+
                 word_score = word_score * mask[i]
 
 
@@ -227,20 +305,66 @@ class CRF(nn.Module):
         all_path_score = t.logsumexp(terminal_var, dim=1)
         return all_path_score
 
+    def _forward_alg2(self, feats, mask):
+        init_alphas = torch.full((1, self.tagset_size), -10000.)
+        # START_TAG has all of the score.
+        init_alphas[0][self.tag_to_ix["<start>"]] = 0.
+        batch = feats.shape[1]
+
+
+        previous = init_alphas.expand(batch, -1) #previous batch,tag
+        previous = previous.to(self.device)
+        mask = mask.float()
+
+        for i,feat in enumerate(feats): #feats:seq,batch,tag     feat: 1,batch,tag
+            word_tag_score = [] # 计算逐个word->tag score
+            for tag in range(self.tagset_size):
+                word_emission = feat[:,tag].unsqueeze(dim=1).expand(-1,54) #word_emission:batch,tags
+                word_tag_transition = self.transitions[tag, :].unsqueeze(dim=0).expand(batch, -1)   #word_tag_transition:batch,tags
+                word_score = previous + word_emission + word_tag_transition #word_score:batch,tags
+
+                word_score = t.logsumexp(word_score, dim=1) #word_score:batch,1
+
+                word_score = word_score * mask[i]
+
+
+                word_tag_score.append(word_score)
+
+            previous = t.cat(word_tag_score, dim=0).view(batch, -1)
+
+        terminal_var = previous + self.transitions[self.tag_to_ix["<stop>"]].expand(batch, -1)
+        all_path_score = t.logsumexp(terminal_var, dim=1)
+        return all_path_score
+
+
+
     def _score_sentence(self, feats, tags, mask):
         #feats: batch,seq,tag
         #tags:tag
         batch = feats.shape[1]
-        score = torch.zeros(batch,1)
-        temp = t.tensor([self.tag_to_ix["<start>"]], dtype=torch.long).view(1,-1)
+        #feats: seq, batch
+        score = torch.zeros(batch).to(self.device)
+        tags = tags.permute(0,1)
+
+        #temp = t.tensor([self.tag_to_ix["<start>"]], dtype=torch.long).view(1)
+        temp = tags.new_full((1, batch), fill_value=self.tag_to_ix["<start>"])
+        temp = temp.to(self.device)
 
         tags = torch.cat([temp, tags], dim=0)
+        #tags = t.transpose(tags, 1, 0 ) #seq,batch
         #tags = tags.expand(batch, 1)
         #tags[0] is start tag.
+        mask = mask.float()
         for i,feat in enumerate(feats):
-            score += (self.transitions[tags[i + 1], tags[i]].expand(batch, -1) + feat[:,tags[i + 1]]) * mask[i]
+            emit_score = torch.stack([f[next_tag] for f, next_tag in zip(feat, tags[i + 1])])
+            transition_score = torch.stack([self.transitions[tags[i + 1, b], tags[i, b]] for b in range(batch)])
+            score += (emit_score + transition_score) * mask[i]
 
-        score = score + (self.transitions[self.tag_to_ix["<stop>"], tags[-1]]).expand(batch, 1)
+        transition_to_end = torch.stack([self.transitions[self.tag_to_ix["<stop>"], tag[mask[:, b].sum().long()]] for b, tag in
+                                         enumerate(tags.transpose(0, 1))])
+
+
+        score += transition_to_end
         return score
 
     def _validate(

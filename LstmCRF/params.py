@@ -54,6 +54,6 @@ def params():
     add_arg("--test_file", default=os.path.join(root_path+"data", "example.test"), help="Path for test data",type=str)
     
     add_arg("--model_type", default="bilstm", help="Model type, can be idcnn or bilstm",type=str)
-    add_arg("--require_improve", default=5000, help="Max step for early stop",type=int)
+    add_arg("--require_improve", default=1, help="Max step for early stop",type=int)
     args = parser.parse_args()
     return args

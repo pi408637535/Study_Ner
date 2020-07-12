@@ -10,7 +10,7 @@ import torch.optim as optim
 
 
 class NERLSTM_CRF(nn.Module):
-    def __init__(self, config, char2id, tag2id, emb_matrix):
+    def __init__(self, config, char2id, tag2id, emb_matrix, device):
         super(NERLSTM_CRF, self).__init__()
 
         self.hidden_dim = config.hidden_dim
@@ -37,7 +37,7 @@ class NERLSTM_CRF(nn.Module):
         """ 得到发射矩阵 """
         self.hidden2tag = nn.Linear(self.hidden_dim, self.tagset_size)
         
-        self.crf = CRF(tag2id, self.tagset_size, batch_first=True)
+        self.crf = CRF(tag2id, self.tagset_size, device,batch_first=True)
 
     def forward(self, char_ids,seg_ids,mask=None):
         

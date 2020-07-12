@@ -48,7 +48,7 @@ def train():
     dev_manager = BatchManager(dev_data, config.batch_size)
     test_manager = BatchManager(test_data, config.batch_size) 
     
-    model = NERLSTM_CRF(config, char_to_id, tag_to_id, emb_matrix)
+    model = NERLSTM_CRF(config, char_to_id, tag_to_id, emb_matrix, device)
     model.train()
     model.to(device)
     optimizer = optim.Adam(model.parameters(), lr=config.lr, weight_decay=config.weight_decay)
@@ -122,7 +122,7 @@ def evaluate_helper(model, data_manager, id_to_tag):
             chars, char_ids, seg_ids, tag_ids, mask = batch
             
             batch_paths = model(char_ids,seg_ids,mask)
-            loss = model.log_likelihood(char_ids, seg_ids, tag_ids,mask)
+            loss = model.neg_log_likelihood(char_ids, seg_ids, tag_ids, mask)
             total_loss += loss.item()    
             
             """ 忽略<pad>标签，计算每个样本的真实长度 """

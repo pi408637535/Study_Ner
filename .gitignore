@@ -10,5 +10,8 @@ buildNumber.properties
 .mvn/timing.properties
 .idea/
 *.iml
+*.pkl
+*.txt
 LstmCRF/logs
+LstmCRF/result
 /bin/
