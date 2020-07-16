@@ -48,10 +48,7 @@ class CRF(nn.Module):
         super().__init__()
         self.num_tags = num_tags
         self.batch_first = batch_first
-        self.start_transitions = nn.Parameter(torch.empty(num_tags))
-        self.end_transitions = nn.Parameter(torch.empty(num_tags))
-        self.transitions = nn.Parameter(torch.empty(num_tags, num_tags))
-
+    
         self.device = device
         self.transitions = nn.Parameter(
             torch.randn(num_tags, num_tags))
@@ -65,7 +62,7 @@ class CRF(nn.Module):
         self.tagset_size = num_tags
         self.tag_to_ix = tag2id
 
-        self.reset_parameters()
+        #self.reset_parameters()
 
     def reset_parameters(self) -> None:
         """Initialize the transition parameters.
@@ -184,6 +181,9 @@ class CRF(nn.Module):
         scores = scores.to(self.device)
 
         pointers = []
+
+        mask = mask.float()
+
         # forward
         for t, feat in enumerate(feats):
             # broadcast dimension: (batch_size, next_tag, current_tag)
@@ -254,6 +254,7 @@ class CRF(nn.Module):
         alpha[:, self.tag_to_ix["<start>"]] = 0
 
         alpha = alpha.to(self.device)
+        mask = mask.float()
 
         for i, feat in enumerate(feats):
             # broadcast dimension: (batch_size, next_tag, current_tag)

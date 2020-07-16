@@ -86,9 +86,10 @@ def train():
                 """ 以f1作为early stop的监控指标 """
                 if dev_f1 > dev_best_f1:
                     
-                    evaluate(model, test_manager, id_to_tag, test=True)
+                    #evaluate(model, test_manager, id_to_tag, test=True)
                     dev_best_f1 = dev_f1
-                    torch.save(model, os.path.join(config.save_dir,"medical_ner.ckpt"))
+                    #torch.save(model, os.path.join(config.save_dir,"medical_ner.ckpt"))
+                    torch.save(model.state_dict(), os.path.join(config.save_dir,"medical_ner.ckpt"))
                     improve = '*'
                     last_improve = total_batch
                 else:
@@ -170,7 +171,8 @@ def predict(input_str):
     
     with open(config.map_file, "rb") as f:
         char_to_id, id_to_char, tag_to_id, id_to_tag = pickle.load(f)
-    
+
+
     """ 用cpu预测 """
     model = torch.load(os.path.join(config.save_dir,"medical_ner.ckpt"), 
                        map_location="cpu"
@@ -192,6 +194,37 @@ def predict(input_str):
     
     pprint(result_to_json(input_str, tags))
 
+def cpu_predict(input_str):
+    with open(config.data_proc_file, "rb") as f:
+        train_data, dev_data, test_data = pickle.load(f)
+        char_to_id, id_to_char, tag_to_id, id_to_tag = pickle.load(f)
+        emb_matrix = pickle.load(f)
+
+    with open(config.map_file, "rb") as f:
+        char_to_id, id_to_char, tag_to_id, id_to_tag = pickle.load(f)
+
+    device = torch.device("cuda" if None else "cpu")
+    model = NERLSTM_CRF(config, char_to_id, tag_to_id, emb_matrix, device)
+    state_dict = torch.load(os.path.join(config.save_dir, "medical_ner.ckpt"),
+                       map_location="cpu")
+    model.load_state_dict(state_dict)
+    """ 用cpu预测 """
+
+    model.eval()
+    if not input_str:
+        input_str = input("请输入文本: ")
+
+    _, char_ids, seg_ids, _ = prepare_dataset([input_str], char_to_id, tag_to_id, test=True)[0]
+    char_tensor = torch.LongTensor(char_ids).view(1, -1)
+    seg_tensor = torch.LongTensor(seg_ids).view(1, -1)
+
+    with torch.no_grad():
+        """ 得到维特比解码后的路径，并转换为标签 """
+        paths = model(char_tensor, seg_tensor)
+        tags = [id_to_tag[idx] for idx in paths[0]]
+
+    pprint(result_to_json(input_str, tags))
+
 
 if __name__ == "__main__":
     
@@ -202,5 +235,5 @@ if __name__ == "__main__":
         
     else:
     
-        input_str = "循环系统由心脏、血管和调节血液循环的神经体液组织构成，循环系统疾病也称为心血管病。"
-        predict(input_str)
+        input_str = "2018 年 5 月 1 日，贝佐斯正与沙特阿拉伯王储穆罕默德·本·萨勒曼（Mohammed bin Salman）在 WhatsApp 上聊天，王储的手机发送了恶意文件，几个小时内攻击者就从亚马逊首席执行官杰夫·贝佐斯（Jeff Bezos）的手机中窃取了一大批数据。"
+        cpu_predict(input_str)

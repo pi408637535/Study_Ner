@@ -27,7 +27,7 @@ def params():
     add_arg("--train", default=True, help="Whether train the model",type=str2bool)
     
     add_arg("--seg_dim",default=20, help="Embedding size for segmentation, 0 if not used", type=int)
-    add_arg("--char_dim", default=100, help="Embedding size for characters", type=int)
+    add_arg("--char_dim", default=300, help="Embedding size for characters", type=int)
     add_arg("--hidden_dim", default=256, help="Num of hidden units in LSTM", type=int)
     add_arg("--tag_schema", default="iobes", help="tagging schema iobes or iob", type=str)
     
@@ -54,6 +54,6 @@ def params():
     add_arg("--test_file", default=os.path.join(root_path+"data", "example.test"), help="Path for test data",type=str)
     
     add_arg("--model_type", default="bilstm", help="Model type, can be idcnn or bilstm",type=str)
-    add_arg("--require_improve", default=1, help="Max step for early stop",type=int)
+    add_arg("--require_improve", default=50, help="Max step for early stop",type=int)
     args = parser.parse_args()
     return args
