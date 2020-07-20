@@ -6,7 +6,7 @@ import torch
 import torch.autograd as autograd
 import torch.nn as nn
 import torch.optim as optim
-
+import torch.nn.functional as F
 
 
 class NERLSTM_CRF(nn.Module):
@@ -30,7 +30,7 @@ class NERLSTM_CRF(nn.Module):
         
         self.dropout = nn.Dropout(config.dropout)
         self.lstm = nn.LSTM(
-            self.emb_dim, self.hidden_dim // 2, num_layers=1, 
+            self.emb_dim, self.hidden_dim // 2, num_layers=2,
             bidirectional=True, batch_first=True
         )
         
@@ -68,3 +68,4 @@ class NERLSTM_CRF(nn.Module):
         
         """ 训练时，得到损失 """
         return  self.crf(feats, tag_ids, mask)
+
