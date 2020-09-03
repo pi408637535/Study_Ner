@@ -226,6 +226,78 @@ def cpu_predict(input_str):
     pprint(result_to_json(input_str, tags))
 
 
+def cpu_predict_file_content():
+
+    def predict_text(model,input_str):
+        if not input_str:
+            input_str = input("请输入文本: ")
+
+        _, char_ids, seg_ids, _ = prepare_dataset([input_str], char_to_id, tag_to_id, test=True)[0]
+        char_tensor = torch.LongTensor(char_ids).view(1, -1)
+        seg_tensor = torch.LongTensor(seg_ids).view(1, -1)
+
+        with torch.no_grad():
+            """ 得到维特比解码后的路径，并转换为标签 """
+            paths = model(char_tensor, seg_tensor)
+            tags = [id_to_tag[idx] for idx in paths[0]]
+
+        return result_to_json(input_str, tags)
+
+
+
+    with open(config.data_proc_file, "rb") as f:
+        train_data, dev_data, test_data = pickle.load(f)
+        char_to_id, id_to_char, tag_to_id, id_to_tag = pickle.load(f)
+        emb_matrix = pickle.load(f)
+
+    with open(config.map_file, "rb") as f:
+        char_to_id, id_to_char, tag_to_id, id_to_tag = pickle.load(f)
+
+    device = torch.device("cuda" if None else "cpu")
+    model = NERLSTM_CRF(config, char_to_id, tag_to_id, emb_matrix, device)
+    state_dict = torch.load(os.path.join(config.save_dir, "medical_ner.ckpt"),
+                       map_location="cpu")
+    model.load_state_dict(state_dict)
+    """ 用cpu预测 """
+
+    model.eval()
+
+    file_all = []
+    c_root = "/home/demo1/guoxin/chinese/"
+    for file in os.listdir(c_root):
+        #if "txtoriginal.txt" in file:
+        file_all.append(file)
+
+    path = "/home/demo1/ner1.csv"
+    i = 1
+    word_set = set()
+    for file in file_all:
+        fp = open(c_root + file, 'r', encoding='utf8')
+
+        i += 1
+        print(i)
+
+        for line in fp:
+            for ele in line.split("。"):
+                if len(ele) < 3:
+                    continue
+
+                results = predict_text(model, ele)
+                for result in results["entities"]:
+                    word_set.add(result["word"])
+
+        if i > 10000:
+            break
+
+        logger.info("i-{0}".format(i))
+
+
+
+    import pandas as pd
+    df = pd.DataFrame({"key": list(word_set)})
+    df.to_csv(path, header=False, encoding='utf_8_sig', index=False)
+
+
 if __name__ == "__main__":
     
     
@@ -236,4 +308,4 @@ if __name__ == "__main__":
     else:
     
         input_str = "换句话说，该漏洞针对的是负责为资源记录分配内存的函数，一旦生成大于65535的字节数，就会导致整数溢出，分配变小。不过，一条DNS消息的UDP限制为512字节（如果服务器支持扩展机制，则限制为4096字节），而TCP 限制为65535字节，因此，仅带有长签名的SIG响应不足以触发此漏洞。但攻击者可以巧妙地利用DNS响应中的DNS名称压缩功能，从而利用上述操作将缓冲区大小增加，进而依旧达到缓冲区溢出的目的。"
-        cpu_predict(input_str)
+        cpu_predict_file_content()
