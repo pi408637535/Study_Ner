@@ -129,7 +129,7 @@ class HMM_NER:
 if __name__ == '__main__':
     model = HMM_NER(char2idx_path="../dicts/char2idx.json",
                     tag2idx_path="../dicts/tag2idx.json")
-    model.fit("../corpus/train_data.txt")
+    #model.fit("../corpus/train_data.txt")
 
     #model.fit("./corpus/train_data.txt")
     #model.predict("我看我")
